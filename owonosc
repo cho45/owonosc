@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-$LOAD_PATH << 'lib'
+$LOAD_PATH << File.dirname(__FILE__) + '/lib'
 
 require "pathname"
 require "tempfile"
@@ -16,6 +16,7 @@ class OWONOSCCommand
 
 	def initialize(opts={})
 		@logger = Logger.new($stdout)
+		@logger.level = Logger::INFO
 		@opts = {
 			host: '192.168.1.72',
 			port: 3000,
@@ -115,17 +116,17 @@ class OWONOSCCommand
 				unless name =~ /\....$/
 					name = name + ".#{default_ext}"
 				end
-				dest = file.parent + name
+				dest = dest.parent + name
 			end
 			dest
 		end
 	end
 
 	def download(type)
-		file = Tempfile.new([$0, '.bmp'])
+		file = Tempfile.new([File.basename($0), '.bmp'])
 		puts "Reading... (from #{@opts[:host]}:#{@opts[:port]})"
 		@osc.read(type) do |buffer, got, length, part, parts|
-			print "[% 2d/% 2d] % 3d%% (%d/%d)\r" % [part + 1, parts, got / length.to_f * 100, got, length]
+			print "[% 2d/% 2d] % 3d%% (%d/%d)\r" % [part, parts, got / length.to_f * 100, got, length]
 			file << buffer
 		end
 		puts "Done"
