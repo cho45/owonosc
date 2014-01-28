@@ -1,0 +1,140 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH << 'lib'
+
+require "pathname"
+require "tempfile"
+require "optparse"
+require "logger"
+
+require "owonosc.rb"
+
+class OWONOSCCommand
+	def self.run(argv)
+		self.new.load_rc.option(argv).run
+	end
+
+	def initialize(opts={})
+		@logger = Logger.new($stdout)
+		@opts = {
+			host: '192.168.1.72',
+			port: 3000,
+			format: 'png',
+		}.update(opts)
+	end
+
+	def load_rc
+		rc = Pathname("~/.#{File.basename(__FILE__)}rc").expand_path
+		@logger.debug "rc file: #{rc}"
+		if rc.exist?
+			binding.eval(rc.read, rc.to_s)
+		end
+		self
+	end
+
+	def option(argv)
+		OptionParser.new do |o|
+			o.banner = <<-EOB.gsub(/^\t+/, "")
+				Usage: #{$0} [opts]
+
+			EOB
+
+			o.separator ""
+
+			o.separator "Options:"
+			o.on("-h", "--host HOSTNAME", "Host name") do |v|
+				@opts[:host] = v
+			end
+
+			o.on("-p", "--port NUMBER", "Port") do |v|
+				@opts[:port] = v.to_i
+			end
+
+			o.on("--format FORMAT", "Output file format: png,gif,jpg,bmp,bin,csv,deep") do |v|
+				@opts[:format] = v
+			end
+
+			o.on("--debug") do |v|
+				@logger.level = Logger::DEBUG
+			end
+
+			argv = o.parse(argv)
+			@dest = argv.shift
+		end
+		self
+	end
+
+	def run
+		@logger.debug @opts
+		@osc = OWONOSC.new(@opts[:host], @opts[:port])
+		@logger.debug @osc
+
+		case @opts[:format]
+		when 'png', 'bmp'
+			@logger.debug 'OWONOSC::STARTBMP'
+			dest = dest_path(@opts[:format])
+			file = download(OWONOSC::STARTBMP)
+
+			puts "Writing #{dest}..."
+			if @opts[:format] == 'bmp'
+				FileUtils.mv(file.path, dest)
+			else
+				require 'RMagick'
+				img = Magick::Image.read(file.path)[0]
+				img.write(dest)
+			end
+			puts "Done"
+		when 'bin'
+			@logger.debug 'OWONOSC::STARTBIN'
+			dest = dest_path('bin')
+			file = download(OWONOSC::STARTBIN)
+			puts "Writing #{dest}..."
+			FileUtils.mv(file.path, dest)
+			puts "Done"
+		when 'csv'
+			raise NotImplementedError
+		when 'deep'
+			@logger.debug 'OWONOSC::STARTMEMDEPTH'
+			dest = dest_path('bin')
+			file = download(OWONOSC::STARTMEMDEPTH)
+			puts "Writing #{dest}..."
+			FileUtils.mv(file.path, dest)
+			puts "Done"
+		end
+	end
+
+	def dest_path(default_ext="bin")
+		if @dest
+			@dest
+		else
+			require "readline"
+			Readline.completion_proc = Readline::FILENAME_COMPLETION_PROC
+			dest = Pathname.pwd + Time.now.strftime("%Y%m%d_%H%m%s_%L.#{default_ext}")
+			name = Readline.readline("Save to [#{dest}]: ")
+			unless name.empty?
+				unless name =~ /\....$/
+					name = name + ".#{default_ext}"
+				end
+				dest = file.parent + name
+			end
+			dest
+		end
+	end
+
+	def download(type)
+		file = Tempfile.new([$0, '.bmp'])
+		puts "Reading... (from #{@opts[:host]}:#{@opts[:port]})"
+		@osc.read(type) do |buffer, got, length, part, parts|
+			print "[% 2d/% 2d] % 3d%% (%d/%d)\r" % [part + 1, parts, got / length.to_f * 100, got, length]
+			file << buffer
+		end
+		puts "Done"
+
+		file.close
+		file
+	end
+end
+
+
+OWONOSCCommand.run(ARGV)
+
