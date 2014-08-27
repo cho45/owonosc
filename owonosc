@@ -80,9 +80,8 @@ class OWONOSCCommand
 			if @opts[:format] == 'bmp'
 				FileUtils.mv(file.path, dest)
 			else
-				require 'RMagick'
-				img = Magick::Image.read(file.path)[0]
-				img.write(dest)
+				system('convert', file.path, dest.to_s)
+				system('optipng', dest.to_s)
 			end
 			puts "Done"
 		when 'bin'
