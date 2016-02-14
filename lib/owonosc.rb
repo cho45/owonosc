@@ -1,4 +1,5 @@
 require 'socket'
+require 'timeout'
 
 class OWONOSC
 	RESPONSE_START_LENGTH = 12
@@ -86,7 +87,7 @@ class OWONOSC
 
 			got = 0
 			while got < length
-				buffer = sock.readpartial(1024)
+				buffer = timeout(5) { sock.sysread(4096) }
 				got += buffer.size
 				yield buffer, got, length, part, parts
 			end
@@ -95,12 +96,14 @@ class OWONOSC
 				length, _, flag = *sock.read(RESPONSE_START_LENGTH).unpack("V3")
 				got = 0
 				while got < length
-					@sock.readpartial(4096, buffer)
+					sock.readpartial(4096, buffer)
 					got += buffer.size
 					yield buffer, got, length, part, parts
 				end
 				part += 1
 			end
+		rescue Timeout::Error
+			warn "timeout"
 		ensure
 			sock.close
 		end
